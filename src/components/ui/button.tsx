@@ -1,7 +1,26 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import type { CSSProperties } from "react"
+import { useRef, type CSSProperties } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
+
+import {
+  liquidButtonConfig,
+  useLiquidGlass,
+} from "@/components/ui/liquid/liquid-glass"
+
+const liquidGlassVariants = [
+  "glass-primary",
+  "glass-secondary",
+  "glass-destructive",
+] as const
+
+type LiquidGlassVariant = (typeof liquidGlassVariants)[number]
+
+function isLiquidGlassVariant(
+  variant: string | null | undefined
+): variant is LiquidGlassVariant {
+  return liquidGlassVariants.some((glassVariant) => glassVariant === variant)
+}
 
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-4xl border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -20,6 +39,12 @@ const buttonVariants = cva(
           "relative overflow-hidden bg-[var(--button-emphasis-bg)] text-destructive-foreground ring-1 ring-[var(--button-emphasis-ring)] shadow-[0_1px_2px_rgba(0,0,0,0.16)] focus-visible:ring-[var(--button-emphasis-ring)] active:ring-[var(--button-emphasis-ring)]",
         "secondary-destructive":
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        "glass-primary":
+          "relative isolate overflow-hidden rounded-full border border-white/60 bg-white/25 text-foreground shadow-lg backdrop-blur-md hover:bg-white/35 focus-visible:ring-offset-2 data-[glass-status=loading]:pointer-events-none dark:border-white/30 dark:bg-white/10 dark:text-foreground dark:hover:bg-white/20",
+        "glass-secondary":
+          "relative isolate overflow-hidden rounded-full border border-white/60 bg-white/25 text-foreground shadow-lg backdrop-blur-md hover:bg-white/35 focus-visible:ring-offset-2 data-[glass-status=loading]:pointer-events-none dark:border-white/30 dark:bg-white/10 dark:text-foreground dark:hover:bg-white/20",
+        "glass-destructive":
+          "relative isolate overflow-hidden rounded-full border border-red-300/60 bg-red-500/15 text-red-700 shadow-lg backdrop-blur-md hover:bg-red-500/25 focus-visible:ring-offset-2 data-[glass-status=loading]:pointer-events-none dark:border-red-300/30 dark:bg-red-400/10 dark:text-red-200 dark:hover:bg-red-400/20",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
@@ -67,17 +92,62 @@ function Button({
   style,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  const rootRef = useRef<HTMLSpanElement>(null)
+  const glassElementRef = useRef<HTMLButtonElement>(null)
+  const isGlassVariant = isLiquidGlassVariant(variant)
+  const glassStatus = useLiquidGlass({
+    rootRef,
+    glassElementRef,
+    enabled: isGlassVariant,
+    config: liquidButtonConfig,
+  })
+
   const hasEmphasisGradient = variant === "default" || variant === "destructive"
   const emphasisStyle = getEmphasisStyle(variant)
 
-  return (
+  const glassStyle =
+    variant === "glass-primary"
+      ? ({ "--glass-accent": "var(--primary)" } as CSSProperties)
+      : variant === "glass-destructive"
+        ? ({ "--glass-accent": "var(--destructive)" } as CSSProperties)
+        : undefined
+
+  const button = (
     <ButtonPrimitive
+      ref={glassElementRef}
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      style={emphasisStyle ? { ...emphasisStyle, ...style } : style}
+      data-glass-status={isGlassVariant ? glassStatus : undefined}
+      className={cn(
+        buttonVariants({ variant, size, className }),
+        isGlassVariant &&
+          glassStatus === "loading" &&
+          "border-white/40 bg-white/20 text-transparent dark:border-white/20 dark:bg-white/10",
+        isGlassVariant &&
+          glassStatus === "fallback" &&
+          "bg-background/80 text-foreground supports-[backdrop-filter]:backdrop-blur-md"
+      )}
+      style={{
+        ...(emphasisStyle ?? {}),
+        ...(glassStyle ?? {}),
+        ...style,
+      }}
       {...props}
     >
-      {hasEmphasisGradient ? (
+      {isGlassVariant ? (
+        <>
+          <span className={cn(glassStatus === "loading" && "invisible")}>
+            {children}
+          </span>
+          {glassStatus === "loading" && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden rounded-[inherit]"
+            >
+              <span className="h-3 w-24 max-w-[65%] animate-pulse rounded-full bg-white/60 dark:bg-white/35" />
+            </span>
+          )}
+        </>
+      ) : hasEmphasisGradient ? (
         <>
           <span
             aria-hidden="true"
@@ -91,6 +161,16 @@ function Button({
         children
       )}
     </ButtonPrimitive>
+  )
+
+  if (!isGlassVariant) {
+    return button
+  }
+
+  return (
+    <span ref={rootRef} className="relative inline-flex">
+      {button}
+    </span>
   )
 }
 
